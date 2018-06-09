@@ -248,31 +248,116 @@ int main() {
 		{
 			car_s=end_path_s;
 		}
-		
-		bool too_close=false;
 
-		//find ref_v to use
+		//avoid collision
+		bool too_close=false;
+		//availability for lane change
+		bool left_change_available=1;
+		bool right_change_available=1;
+		//lane speeds
+		vector<double> lanespeeds(3,49.5);
+
+		//find the adjacent cars from the sensor funsion data
 		for(int i=0;i<sensor_fusion.size();i++)
-		{
-			//car is in my lane
+		{	
+			//get vehicle kinematics information(vx,vy,s,d,lane) from sensors
+			double vx=sensor_fusion[i][3];
+			double vy=sensor_fusion[i][4];
+			double check_speed=sqrt(vx*vx+vy*vy);
+			double check_car_s=sensor_fusion[i][5];
+			//predict the non ego car's position assuming that it moves in a constant speed without lane change
+			check_car_s+=(double)prev_size*0.02*check_speed;
 			float d = sensor_fusion[i][6];
+			int check_car_lane;
+			if(d>=0&&d<4)  check_car_lane=0;
+			if(d>=4&&d<8)  check_car_lane=1;
+			if(d>=8&&d<=12)  check_car_lane=2;
+			
+			//ignore the cars which are far away from ego vehicle, only consider the adjacent cars
+			if(abs(check_car_s-car_s)>30)
+				continue;
+						
+			//avoid car crush in the same lane
 			if(d<(2+4*lane+2)&&d>(2+4*lane-2))
 			{
-				double vx=sensor_fusion[i][3];
-				double vy=sensor_fusion[i][4];
-				double check_speed=sqrt(vx*vx+vy*vy);
-				double check_car_s=sensor_fusion[i][5];
-				check_car_s+=(double)prev_size*0.02*check_speed;
+
 				//check s values greater than mine and s gap
 				if((check_car_s>car_s)&&((check_car_s-car_s)<30))
 				{
-					//we avoid car crush by reducing speed
+					//we avoid car crush by reducing speed 
 					//ref_vel=29.5; //mph
-					too_close=true;
+					too_close=true;					
+					
 				}
+			} 
+			//print the adjacent car info and ego car info
+			cout<<"vid:"<<i<<endl;
+			cout<<"speed:"<<check_speed<<endl;
+			cout<<"s:"<<check_car_s<<endl;
+			cout<<"lane:"<<check_car_lane<<endl;
+			cout<<"egocar_s"<<car_s<<endl;
+			cout<<"ref_v"<<ref_vel<<endl;
+			cout<<"ego_lane"<<lane<<endl;
+			
+			//check left/right lane change availability
+			if(abs(check_car_s-car_s)<5)
+			{
+				if(lane-1==check_car_lane) left_change_available=0;
+				if(lane+1==check_car_lane) right_change_available=0;
 			}
+
+			//calculate lane speeds
+			if(check_car_lane!=lane)
+				lanespeeds[check_car_lane]=min(check_speed,lanespeeds[check_car_lane]);
+			if(check_car_lane==lane)
+			{
+				if(check_car_s>car_s)
+					lanespeeds[check_car_lane]=min(check_speed,lanespeeds[check_car_lane]);
+			}	
+
 		}
+		//print availability
+		cout<<"left_change_available"<<left_change_available<<endl;
+		cout<<"right_change_available"<<right_change_available<<endl;
+		//print lane speeds
+		cout<<"lanespeeds[0]:"<<lanespeeds[0]<<endl;
+		cout<<"lanespeeds[1]:"<<lanespeeds[1]<<endl;
+		cout<<"lanespeeds[2]:"<<lanespeeds[2]<<endl;
+
+		//cost function
+		vector<string> states;
+		float cost;
+		float targetlane_cost;
+		float inefficiency_cost;
+		vector<float> costs;
+		string next_state;
+		// check possible successor states
+		states.push_back("KL");
+		if(lane==0) states.push_back("LCR");
+		if(lane==1) {states.push_back("LCL"); states.push_back("LCR");}
+		if(lane==2) states.push_back("LCL");
+		// check next state(behavior planning)
+		for(int i=0;i<states.size();i++){
+			int new_lane;
+			if(states[i].compare("KL")==0)
+				new_lane=lane;
+			if(states[i].compare("LCL")==0)
+				new_lane=lane-1;
+			if(states[i].compare("LCR")==0)
+				new_lane=lane+1;
+			targetlane_cost=abs(new_lane-1);
+			inefficiency_cost=(49.5-lanespeeds[new_lane])/49.5;
+			cost=0.5*targetlane_cost+1*inefficiency_cost;
+			costs.push_back(cost);
+		}
+		vector<float>::iterator best_cost = min_element(begin(costs), end(costs));
+		int best_idx = distance(begin(costs), best_cost);
+		next_state=states[best_idx];
+		cout<<"best behav:"<<next_state<<endl;
 		
+		// change lane
+		if(next_state=="LCL")	lane-=1;
+		if(next_state=="LCR")	lane+=1;
 		
 		// create a list of widely spaced (x,y) waypoints, evenly spaced at 30m
 		vector<double> ptsx;
@@ -350,7 +435,7 @@ int main() {
 		double x_add_on=0;
 		
 		//fill up the rest of our path planner after filling it with previous points, here we will always output 50 points
-		for(int i=0;i<=50-previous_path_x.size();i++)
+		for(int i=0;i<=60-previous_path_x.size();i++)
 		{
 			
 			if(too_close)
@@ -359,8 +444,8 @@ int main() {
 			}
 			else if(ref_vel<49.5)
 			{
-				ref_vel+=0.06;
-				cout<<"acc"<<endl;
+				ref_vel+=0.09;
+				//cout<<"acc"<<endl;
 			}
 
 			double N=target_dist/(0.02*ref_vel/2.24);
@@ -372,11 +457,11 @@ int main() {
 			//rotate back to normal after rotating it earlier
 			x_point=x_ref*cos(ref_yaw)-y_ref*sin(ref_yaw);
 			y_point=x_ref*sin(ref_yaw)+y_ref*cos(ref_yaw);
-			cout<<"next x:"<<x_point<<endl;
-			cout<<"next y:"<<y_point<<endl;
+			//cout<<"next x:"<<x_point<<endl;
+			//cout<<"next y:"<<y_point<<endl;
 			//cout<<"delta_dist"<<sqrt(x_ref*x_ref+y_ref*y_ref)<<endl;
-			cout<<"ref x:"<<ref_x<<endl;
-			cout<<"ref y:"<<ref_y<<endl;
+			//cout<<"ref x:"<<ref_x<<endl;
+			//cout<<"ref y:"<<ref_y<<endl;
 			x_point+=ref_x;
 			y_point+=ref_y;
 			next_x_vals.push_back(x_point);
