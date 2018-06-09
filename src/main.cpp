@@ -290,7 +290,7 @@ int main() {
 					
 				}
 			} 
-			//print the adjacent car info and ego car info
+			/*print the adjacent car info and ego car info
 			cout<<"vid:"<<i<<endl;
 			cout<<"speed:"<<check_speed<<endl;
 			cout<<"s:"<<check_car_s<<endl;
@@ -298,7 +298,8 @@ int main() {
 			cout<<"egocar_s"<<car_s<<endl;
 			cout<<"ref_v"<<ref_vel<<endl;
 			cout<<"ego_lane"<<lane<<endl;
-			
+			*/
+
 			//check left/right lane change availability
 			if(abs(check_car_s-car_s)<5)
 			{
@@ -316,14 +317,14 @@ int main() {
 			}	
 
 		}
-		//print availability
+		/*print availability
 		cout<<"left_change_available"<<left_change_available<<endl;
 		cout<<"right_change_available"<<right_change_available<<endl;
 		//print lane speeds
 		cout<<"lanespeeds[0]:"<<lanespeeds[0]<<endl;
 		cout<<"lanespeeds[1]:"<<lanespeeds[1]<<endl;
 		cout<<"lanespeeds[2]:"<<lanespeeds[2]<<endl;
-
+		*/
 		//cost function
 		vector<string> states;
 		float cost;
@@ -353,7 +354,7 @@ int main() {
 		vector<float>::iterator best_cost = min_element(begin(costs), end(costs));
 		int best_idx = distance(begin(costs), best_cost);
 		next_state=states[best_idx];
-		cout<<"best behav:"<<next_state<<endl;
+		//cout<<"best state:"<<next_state<<endl;
 		
 		// change lane
 		if(next_state=="LCL")	lane-=1;
@@ -370,7 +371,6 @@ int main() {
 		double ref_yaw = deg2rad(car_yaw);
 
 		// if previous size is almost empty, use the car as starting reference
-		cout<<"prev_size:"<<prev_size<<endl;
 		if (prev_size<2)
 		{
 			double prev_car_x=car_x-cos(car_yaw);
